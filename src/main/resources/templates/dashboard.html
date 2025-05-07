@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="">
+<head>
+    <title>Scan Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/stompjs@2.3.3/lib/stomp.min.js"></script>
+    <script>
+        let stompClient = null;
+
+        // Connect to WebSocket
+        function connectWebSocket() {
+            const socket = new SockJS('/ws');
+            stompClient = Stomp.over(socket);
+            stompClient.connect({}, function () {
+                stompClient.subscribe('/topic/scan-progress', function (message) {
+                    const progressDiv = document.getElementById('progress-output');
+                    progressDiv.innerHTML += '<div>' + message.body + '</div>';
+
+                    // Re-enable the button when scan is complete
+                    if (message.body.includes("Scan complete") || message.body.includes("Scan failed")) {
+                        const profile = message.body.split(":")[0].trim();
+                        const button = document.querySelector(`button[data-profile="${profile}"]`);
+                        if (button) {
+                            button.disabled = false;  // Re-enable button
+                        }
+                    }
+                });
+            });
+        }
+
+        // Send rescan request to the backend
+        function sendRescan(button) {
+            const profile = button.getAttribute("data-profile");
+            const target = button.getAttribute("data-target");
+
+            button.disabled = true;  // Disable the button when clicked
+            document.getElementById('progress-output').innerHTML = ''; // Clear previous progress output
+
+            const formData = new URLSearchParams();
+            formData.append("profile", profile);
+            formData.append("target", target);
+
+            fetch('/scan/rescan', {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                }
+            });
+        }
+
+        window.onload = connectWebSocket;  // Connect WebSocket on page load
+    </script>
+</head>
+<body>
+<h1>Scan Dashboard</h1>
+
+<table>
+    <tr>
+        <td>Profile</td>
+        <td>Action</td>
+    </tr>
+    <tr th:each="entry : ${scanData}">
+        <td th:text="${entry.key}"></td>
+        <td>
+            <button type="button"
+                    class="rescan-btn btn btn-sm btn-primary shadow-sm px-3 py-2"
+                    th:data-profile="${entry.key}"
+                    th:data-target="${entry.key}"
+            th:onclick="|sendRescan(this)|">
+            ▶
+            </button>
+        </td>
+    </tr>
+</table>
+
+<div id="progress-output" style="margin-top: 20px; font-family: monospace;"></div>
+</body>
+</html>
